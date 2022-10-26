@@ -10,6 +10,8 @@
 #include "mchp_upside_down.h"
 #include "mchp_rotations.h"
 
+#define WHITE_BACKDROP
+
 #ifndef PSTR
  #define PSTR // Make Arduino Due happy
 #endif
@@ -151,120 +153,22 @@ void fixdrawRGBBitmap(int16_t x, int16_t y, const uint16_t *bitmap, int16_t w, i
 // 4 levels of crossing red lines.
 //matrix->drawLine(0,mh/2-2, mw-1,2, LED_RED_VERYLOW);
 
-void display_scrollText() {
-    uint8_t size = max(int(mw/8), 1);
-    matrix->clear();
-    matrix->setTextWrap(false);  // we don't wrap text so it scrolls nicely
-    matrix->setTextSize(1);
-    matrix->setRotation(0);
-    for (int8_t x=7; x>=-42; x--) {
-	matrix->clear();
-	matrix->setCursor(x,0);
-	matrix->setTextColor(LED_GREEN_HIGH);
-	matrix->print("Hello");
-	if (mh>11) {
-	    matrix->setCursor(-20-x,mh-7);
-	    matrix->setTextColor(LED_ORANGE_HIGH);
-	    matrix->print("World");
-	}
-	matrix->show();
-       delay(50);
-    }
-
-    matrix->setRotation(3);
-    matrix->setTextSize(size);
-    matrix->setTextColor(LED_BLUE_HIGH);
-    for (int16_t x=8*size; x>=-6*8*size; x--) {
-	matrix->clear();
-	matrix->setCursor(x,mw/2-size*4);
-	matrix->print("Rotate");
-	matrix->show();
-	// note that on a big array the refresh rate from show() will be slow enough that
-	// the delay become irrelevant. This is already true on a 32x32 array.
-        delay(50/size);
-    }
-    matrix->setRotation(0);
-    matrix->setCursor(0,0);
-    matrix->show();
-}
-
-// Scroll within big bitmap so that all if it becomes visible or bounce a small one.
-// If the bitmap is bigger in one dimension and smaller in the other one, it will
-// be both panned and bounced in the appropriate dimensions.
-void display_panOrBounceBitmap (uint8_t bitmapSize) {
-    // keep integer math, deal with values 16 times too big
-    // start by showing upper left of big bitmap or centering if the display is big
-    int16_t xf = max(0, (mw-bitmapSize)/2) << 4;
-    int16_t yf = max(0, (mh-bitmapSize)/2) << 4;
-    // scroll speed in 1/16th
-    int16_t xfc = 6;
-    int16_t yfc = 3;
-    // scroll down and right by moving upper left corner off screen 
-    // more up and left (which means negative numbers)
-    int16_t xfdir = -1;
-    int16_t yfdir = -1;
-
-    for (uint16_t i=1; i<200; i++) {
-	bool updDir = false;
-
-	// Get actual x/y by dividing by 16.
-	int16_t x = xf >> 4;
-	int16_t y = yf >> 4;
-
-	matrix->clear();
-	// bounce 8x8 tri color smiley face around the screen
-	// pan 24x24 pixmap
-	matrix->drawRGBBitmap(x, y, (const uint16_t *) mchp, bitmapSize, bitmapSize);
-	matrix->show();
-	 
-	// Only pan if the display size is smaller than the pixmap
-	// but not if the difference is too small or it'll look bad.
-	if (bitmapSize-mw>2) {
-	    xf += xfc*xfdir;
-	    if (xf >= 0)                      { xfdir = -1; updDir = true ; };
-	    // we don't go negative past right corner, go back positive
-	    if (xf <= ((mw-bitmapSize) << 4)) { xfdir = 1;  updDir = true ; };
-	}
-	if (bitmapSize-mh>2) {
-	    yf += yfc*yfdir;
-	    // we shouldn't display past left corner, reverse direction.
-	    if (yf >= 0)                      { yfdir = -1; updDir = true ; };
-	    if (yf <= ((mh-bitmapSize) << 4)) { yfdir = 1;  updDir = true ; };
-	}
-	// only bounce a pixmap if it's smaller than the display size
-	if (mw>bitmapSize) {
-	    xf += xfc*xfdir;
-	    // Deal with bouncing off the 'walls'
-	    if (xf >= (mw-bitmapSize) << 4) { xfdir = -1; updDir = true ; };
-	    if (xf <= 0)           { xfdir =  1; updDir = true ; };
-	}
-	if (mh>bitmapSize) {
-	    yf += yfc*yfdir;
-	    if (yf >= (mh-bitmapSize) << 4) { yfdir = -1; updDir = true ; };
-	    if (yf <= 0)           { yfdir =  1; updDir = true ; };
-	}
-	
-	if (updDir) {
-	    // Add -1, 0 or 1 but bind result to 1 to 1.
-	    // Let's take 3 is a minimum speed, otherwise it's too slow.
-	    xfc = constrain(xfc + random(-1, 2), 3, 16);
-	    yfc = constrain(xfc + random(-1, 2), 3, 16);
-	}
-	delay(10);
-    }
-}
 
 void logo_shake(void){
   for(int i = 8; i >= 0; i--){
     matrix->clear();
-    matrix->fillScreen(LED_WHITE_HIGH);
+    #ifdef WHITE_BACKDROP
+      matrix->fillScreen(LED_WHITE_HIGH);
+    #endif
     matrix->drawRGBBitmap(i, 0, (const uint16_t *) mchp, 24, 24);
     matrix->show();
     delay(25);
   }
   for(int i = 1; i < 8; i++){
     matrix->clear();
-    matrix->fillScreen(LED_WHITE_HIGH);
+    #ifdef WHITE_BACKDROP
+      matrix->fillScreen(LED_WHITE_HIGH);
+    #endif
     matrix->drawRGBBitmap(i, 0, (const uint16_t *) mchp, 24, 24);
     matrix->show();
     delay(25);
@@ -276,7 +180,9 @@ void logo_flip(void){
   // flip
   for(int i = 0; i < 12; i++){
     matrix->clear();
-    matrix->fillScreen(LED_WHITE_HIGH);
+    #ifdef WHITE_BACKDROP
+      matrix->fillScreen(LED_WHITE_HIGH);
+    #endif
     matrix->drawRGBBitmap(4, 0, (const uint16_t *) mchp, 24, 24);
     for(int j = -1; j < i; j++){
       matrix->drawLine(0, 0+j, 32, 0+j, LED_BLACK);
@@ -288,7 +194,9 @@ void logo_flip(void){
 
   for(int i = 12; i >= 0; i--){
     matrix->clear();
-    matrix->fillScreen(LED_WHITE_HIGH);
+    #ifdef WHITE_BACKDROP
+      matrix->fillScreen(LED_WHITE_HIGH);
+    #endif
     matrix->drawRGBBitmap(4, 0, (const uint16_t *) mchp_upside_down, 24, 24);
     for(int j = 0; j < i; j++){
       matrix->drawLine(0, 0+j, 32, 0+j, LED_BLACK);
@@ -303,7 +211,9 @@ void logo_flip(void){
   // unfip
   for(int i = 0; i < 12; i++){
     matrix->clear();
-    matrix->fillScreen(LED_WHITE_HIGH);    
+    #ifdef WHITE_BACKDROP
+      matrix->fillScreen(LED_WHITE_HIGH);    
+    #endif
     matrix->drawRGBBitmap(4, 0, (const uint16_t *) mchp_upside_down, 24, 24);
     for(int j = -1; j < i; j++){
       matrix->drawLine(0, 0+j, 32, 0+j, LED_BLACK);
@@ -315,7 +225,9 @@ void logo_flip(void){
 
   for(int i = 12; i >= 0; i--){
     matrix->clear();
-    matrix->fillScreen(LED_WHITE_HIGH);
+    #ifdef WHITE_BACKDROP
+      matrix->fillScreen(LED_WHITE_HIGH);
+    #endif
     matrix->drawRGBBitmap(4, 0, (const uint16_t *) mchp, 24, 24);
     for(int j = 0; j < i; j++){
       matrix->drawLine(0, 0+j, 32, 0+j, LED_BLACK);
@@ -333,7 +245,9 @@ void logo_rotate(void){
   
   for(int i = 0; i < (int)360/ROTATION_DEGREES; i++){
    matrix->clear();
+   #ifdef WHITE_BACKDROP
    matrix->fillScreen(LED_WHITE_HIGH);    
+   #endif
    matrix->drawRGBBitmap(4, 0, (const uint16_t *) mchp_rotate[i], 24, 24);
    matrix->show();
    delay(100);
@@ -342,7 +256,11 @@ void logo_rotate(void){
 }
 
 void loop() {
-  logo_rotate();
+  matrix->clear();
+   matrix->drawRGBBitmap(4, 0, (const uint16_t *) mchp, 24, 24);
+   matrix->show();
+   delay(1000);
+
 }
 
 void setup() {

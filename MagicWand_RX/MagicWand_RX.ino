@@ -4,6 +4,76 @@
 
 #include <Arduino.h>
 
+// neopixel array libraries
+#include <Adafruit_GFX.h>
+#include <Adafruit_NeoMatrix.h>
+#include <Adafruit_NeoPixel.h>
+#include "mchp.h"
+#include "mchp_upside_down.h"
+#include "mchp_rotations.h"
+
+bool TLS_config(void);
+bool connect_lte(void);
+bool connect_mqtt(void);
+void logo_shake(void);
+void logo_rotate(void);
+void logo_flip(void);
+
+#define PIN PIN_PE1
+
+#define WHITE_BACKDROP // if a white background should fill the rest of the pixel rectangle
+#define BRIGHTNESS 32
+
+
+#ifndef PSTR
+ #define PSTR // Make Arduino Due happy
+#endif
+
+Adafruit_NeoMatrix *matrix = new Adafruit_NeoMatrix(32, 8, 1, 3, PIN,
+  NEO_MATRIX_TOP + NEO_MATRIX_LEFT +
+    NEO_MATRIX_COLUMNS + NEO_MATRIX_ZIGZAG +
+// progressive vs zigzag makes no difference for a 4 arrays next to one another
+    NEO_TILE_COLUMNS+ NEO_TILE_TOP + NEO_TILE_LEFT +  NEO_TILE_PROGRESSIVE,
+  NEO_GRB + NEO_KHZ800 );
+
+#define LED_BLACK    0
+
+#define LED_RED_VERYLOW   (3 <<  11)
+#define LED_RED_LOW     (7 <<  11)
+#define LED_RED_MEDIUM    (15 << 11)
+#define LED_RED_HIGH    (31 << 11)
+
+#define LED_GREEN_VERYLOW (1 <<  5)   
+#define LED_GREEN_LOW     (15 << 5)  
+#define LED_GREEN_MEDIUM  (31 << 5)  
+#define LED_GREEN_HIGH    (63 << 5)  
+
+#define LED_BLUE_VERYLOW  3
+#define LED_BLUE_LOW    7
+#define LED_BLUE_MEDIUM   15
+#define LED_BLUE_HIGH     31
+
+#define LED_ORANGE_VERYLOW  (LED_RED_VERYLOW + LED_GREEN_VERYLOW)
+#define LED_ORANGE_LOW    (LED_RED_LOW     + LED_GREEN_LOW)
+#define LED_ORANGE_MEDIUM (LED_RED_MEDIUM  + LED_GREEN_MEDIUM)
+#define LED_ORANGE_HIGH   (LED_RED_HIGH    + LED_GREEN_HIGH)
+
+#define LED_PURPLE_VERYLOW  (LED_RED_VERYLOW + LED_BLUE_VERYLOW)
+#define LED_PURPLE_LOW    (LED_RED_LOW     + LED_BLUE_LOW)
+#define LED_PURPLE_MEDIUM (LED_RED_MEDIUM  + LED_BLUE_MEDIUM)
+#define LED_PURPLE_HIGH   (LED_RED_HIGH    + LED_BLUE_HIGH)
+
+#define LED_CYAN_VERYLOW  (LED_GREEN_VERYLOW + LED_BLUE_VERYLOW)
+#define LED_CYAN_LOW    (LED_GREEN_LOW     + LED_BLUE_LOW)
+#define LED_CYAN_MEDIUM   (LED_GREEN_MEDIUM  + LED_BLUE_MEDIUM)
+#define LED_CYAN_HIGH   (LED_GREEN_HIGH    + LED_BLUE_HIGH)
+
+#define LED_WHITE_VERYLOW (LED_RED_VERYLOW + LED_GREEN_VERYLOW + LED_BLUE_VERYLOW)
+#define LED_WHITE_LOW   (LED_RED_LOW     + LED_GREEN_LOW     + LED_BLUE_LOW)
+#define LED_WHITE_MEDIUM  (LED_RED_MEDIUM  + LED_GREEN_MEDIUM  + LED_BLUE_MEDIUM)
+#define LED_WHITE_HIGH    (LED_RED_HIGH    + LED_GREEN_HIGH    + LED_BLUE_HIGH)
+
+
 #include <ecc608.h>
 #include <led_ctrl.h>
 #include <log.h>
@@ -11,10 +81,8 @@
 #include <mqtt_client.h>
 #include <sequans_controller.h>
 
-#include "tinyNeoPixel_Static.h"
 
 #define MQTT_SUB_TOPIC "magicwand"
-
 #define MQTT_THING_NAME    "wand2"
 #define MQTT_BROKER        "6de6ef5108aa44d390ca2e675d9d6aad.s1.eu.hivemq.cloud"
 #define MQTT_PORT          8883
@@ -26,36 +94,15 @@
 
 #define LOG Serial3
 
-void TLS_config(void);
-void connect_lte(void);
-void connect_mqtt(void);
-
 // functions to react to motion
 void state_off();
-void state_one();
-void state_two();
+void state_standby();
+void state_flip();
+void state_shake();
+void state_rotate();
 
 // Which pin on the Arduino is connected to the NeoPixels?
 #define PIN            PIN_PE1
-
-// How many NeoPixels are attached to the Arduino?
-#define NUMPIXELS      32
-
-// Since this is for the static version of the library, we need to supply the pixel array
-// This saves space by eliminating use of malloc() and free(), and makes the RAM used for
-// the frame buffer show up when the sketch is compiled.
-
-byte pixels[NUMPIXELS * 3];
-
-// When we setup the NeoPixel library, we tell it how many pixels, and which pin to use to send signals.
-// Note that for older NeoPixel strips you might need to change the third parameter--see the strandtest
-// example for more information on possible values.
-
-tinyNeoPixel leds = tinyNeoPixel(NUMPIXELS, PIN, NEO_GRB, pixels);
-
-#define DELAY_TIME 1  // delay time in ms (between lighting individual LEDs)
-#define LONG_DELAY_TIME 3000  // 3 sec between colour changes
-
 
 // states of FSM
 typedef enum  {
@@ -71,10 +118,6 @@ typedef struct  {
 APP_DATA_t state_mach;  // create instance of FSM
 
 
-void test(char* topic, uint16_t message_length, int32_t message_id){
-  Log.info("I am a function");
-}
-
 void setup() {
   // Setup MQTT
   Log.begin(115200);
@@ -82,56 +125,34 @@ void setup() {
   LedCtrl.begin();
   LedCtrl.startupCycle();
 
+  // Setup LED matrix
+  matrix->begin();
+  matrix->setTextWrap(false);
+  matrix->setBrightness(BRIGHTNESS);
+  matrix->clear();
+  matrix->show();
+
+  // Setup cell connection, matrix turns green then black when ready
   Log.info("Starting initialization of MQTT with username and password");
-  TLS_config();
-  connect_lte();
-  connect_mqtt();
-  Log.info("Connected to MQTT");
-
-//  if(!MqttClient.subscribe(MQTT_SUB_TOPIC)) {
-//      Log.error("Could not subscribe to topic");
-//  } else {
-//      Log.info("Subscribed to topic");
-//  }
-//  MqttClient.onReceive(test);
+  matrix->clear();
+  matrix->fillScreen(LED_GREEN_LOW);
+  matrix->show();
+  if(TLS_config() && connect_lte() && connect_mqtt()){
+    matrix->clear();
+    matrix->fillScreen(LED_GREEN_HIGH);
+    matrix->show();
+    delay(2000);
+    matrix->clear();
+    matrix->fillScreen(LED_BLACK);
+    matrix->show();
+  } else {
+    matrix->clear();
+    matrix->fillScreen(LED_RED_HIGH);
+    matrix->show();
+    while(1);
+  }
   
-  pinMode(PIN, OUTPUT);
-  // with tinyNeoPixel_Static, you need to set pinMode yourself. This means you can eliminate pinMode()
-  // and replace with direct port writes to save a couple hundred bytes in sketch size (note that this
-  // savings is only present when you eliminate *all* references to pinMode).
-  // leds.begin() not needed on tinyNeoPixel
-
   state_mach.state = OFF; // start in OFF state
-}
-
-void state_off(void){
-      for (int i=0; i < NUMPIXELS; i++) {
-        leds.setPixelColor(i, leds.Color(0, 0, 0));
-        leds.show();
-        delay(DELAY_TIME);
-      }
-      state_mach.state = OFF;
-      delay(LONG_DELAY_TIME);
-}
-
-void state_one(void){
-        for (int i=0; i < NUMPIXELS; i++) {
-        leds.setPixelColor(i, leds.Color(10, 0, 0));
-        leds.show();
-        delay(DELAY_TIME);
-      }
-      state_mach.state = OFF;
-      delay(LONG_DELAY_TIME);
-}
-
-void state_two(void){
-        for (int i=0; i < NUMPIXELS; i++) {
-        leds.setPixelColor(i, leds.Color(0, 10, 0));
-        leds.show();
-        delay(DELAY_TIME);
-      }
-      state_mach.state = OFF;
-      delay(LONG_DELAY_TIME);
 }
 
 void loop() {
@@ -154,18 +175,147 @@ void loop() {
       state_off();
       break;
     case ONE:  
-      state_one();
+      state_flip();
     case TWO:
-      state_two();
+      state_shake();
       break;
   }
 }
 
+void state_off(void){
+  matrix->clear();
+  matrix->fillScreen(LED_BLACK);
+  matrix->show();
+}
 
-void TLS_config(void)
+void state_standby(void){
+    matrix->clear();
+    #ifdef WHITE_BACKDROP
+      matrix->fillScreen(LED_WHITE_HIGH);
+    #endif
+    matrix->drawRGBBitmap(5, 0, (const uint16_t *) mchp, 24, 24);
+    matrix->show();
+}
+
+void state_shake(void){
+  logo_shake();
+}
+
+void state_flip(void){
+  logo_flip();
+}
+
+void state_rotate(void){
+  logo_rotate();
+}
+
+/*
+ * ############## ANIMATION FUNCTIONS
+ */
+void logo_shake(void){
+  for(int i = 8; i >= 0; i--){
+    matrix->clear();
+    #ifdef WHITE_BACKDROP
+      matrix->fillScreen(LED_WHITE_HIGH);
+    #endif
+    matrix->drawRGBBitmap(i, 0, (const uint16_t *) mchp, 24, 24);
+    matrix->show();
+    delay(25);
+  }
+  for(int i = 1; i < 8; i++){
+    matrix->clear();
+    #ifdef WHITE_BACKDROP
+      matrix->fillScreen(LED_WHITE_HIGH);
+    #endif
+    matrix->drawRGBBitmap(i, 0, (const uint16_t *) mchp, 24, 24);
+    matrix->show();
+    delay(25);
+  }
+
+}
+void logo_flip(void){
+  #define FLIP_DELAY 0
+  // flip
+  for(int i = 0; i < 12; i++){
+    matrix->clear();
+    #ifdef WHITE_BACKDROP
+      matrix->fillScreen(LED_WHITE_HIGH);
+    #endif
+    matrix->drawRGBBitmap(4, 0, (const uint16_t *) mchp, 24, 24);
+    for(int j = -1; j < i; j++){
+      matrix->drawLine(0, 0+j, 32, 0+j, LED_BLACK);
+      matrix->drawLine(0, 24-j, 32, 24-j, LED_BLACK);
+    }
+    matrix->show();
+    delay(FLIP_DELAY);
+  }
+
+  for(int i = 12; i >= 0; i--){
+    matrix->clear();
+    #ifdef WHITE_BACKDROP
+      matrix->fillScreen(LED_WHITE_HIGH);
+    #endif
+    matrix->drawRGBBitmap(4, 0, (const uint16_t *) mchp_upside_down, 24, 24);
+    for(int j = 0; j < i; j++){
+      matrix->drawLine(0, 0+j, 32, 0+j, LED_BLACK);
+      matrix->drawLine(0, 24-j, 32, 24-j, LED_BLACK);
+    }
+    matrix->show();
+    delay(FLIP_DELAY);
+  }
+
+  delay(3000);
+
+  // unfip
+  for(int i = 0; i < 12; i++){
+    matrix->clear();
+    #ifdef WHITE_BACKDROP
+      matrix->fillScreen(LED_WHITE_HIGH);    
+    #endif
+    matrix->drawRGBBitmap(4, 0, (const uint16_t *) mchp_upside_down, 24, 24);
+    for(int j = -1; j < i; j++){
+      matrix->drawLine(0, 0+j, 32, 0+j, LED_BLACK);
+      matrix->drawLine(0, 24-j, 32, 24-j, LED_BLACK);
+    }
+    matrix->show();
+    delay(FLIP_DELAY);
+  }
+
+  for(int i = 12; i >= 0; i--){
+    matrix->clear();
+    #ifdef WHITE_BACKDROP
+      matrix->fillScreen(LED_WHITE_HIGH);
+    #endif
+    matrix->drawRGBBitmap(4, 0, (const uint16_t *) mchp, 24, 24);
+    for(int j = 0; j < i; j++){
+      matrix->drawLine(0, 0+j, 32, 0+j, LED_BLACK);
+      matrix->drawLine(0, 24-j, 32, 24-j, LED_BLACK);
+    }
+    matrix->show();
+    delay(FLIP_DELAY);
+  }
+  delay(3000);
+}
+
+void logo_rotate(void){
+  #define ROTATION_DEGREES 15
+  for(int i = 0; i < (int)360/ROTATION_DEGREES; i++){
+   matrix->clear();
+   #ifdef WHITE_BACKDROP
+   matrix->fillScreen(LED_WHITE_HIGH);    
+   #endif
+   matrix->drawRGBBitmap(4, 0, (const uint16_t *) mchp_rotate[i], 24, 24);
+   matrix->show();
+   delay(100);
+  }
+}
+
+/*
+ * ############## END OF ANIMATION FUNCTIONS
+ */
+bool TLS_config(void)
 {
-
- 
+  
     SequansController.begin();
     Log.info(">> Setting up security profile for MQTT TLS without ECC");
 
@@ -175,16 +325,15 @@ void TLS_config(void)
 
     if (!SequansController.waitForURC("SQNSPCFG", NULL, 0, 4000)) {
         Log.infof(">> Error: Failed to set security profile\r\n");
-        return;
+        return false;
     }
     Log.info(">> TLS config complete");
     SequansController.end();
-
+    return true;
 }
 
-void connect_lte(void)
+bool connect_lte(void)
 {
-
     
     Log.info(">> LTE connect");
 
@@ -192,14 +341,14 @@ void connect_lte(void)
     if (!Lte.begin()) 
     {
         Log.error(">> LTE connect fail\r\n");
+        return false;
         // Halt here
-        while (1) {}
     }
-
+  return true;
     
 } // end connect lte
 
-void connect_mqtt(void)
+bool connect_mqtt(void)
 {
     int connect_attempt = 0;
   // Connect to the MGtt broker
@@ -222,6 +371,7 @@ void connect_mqtt(void)
           Log.rawf(">> broker connected\n");
           MqttClient.subscribe(MQTT_SUB_TOPIC);
           delay(2000);
+          return true;
           /*
           MqttClient.end();
           Log.rawf("hanging up\r\n");
@@ -234,5 +384,7 @@ void connect_mqtt(void)
         Log.rawf("\r\n");
         Log.error(">> broker connect fail, \r\n>> terminating LTE connection\r\n");
         Lte.end();
+        return false;
       }
+      return false;
 }
