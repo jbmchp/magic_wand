@@ -106,9 +106,7 @@ void state_rotate();
 
 // states of FSM
 typedef enum  {
-  OFF = 0,
-  ONE = 1,
-  TWO = 2
+  OFF, STANDBY, SHAKE, FLIP, ROTATE
 }APP_STATES;
 
 typedef struct  {
@@ -174,10 +172,17 @@ void loop() {
     case OFF: // off functions
       state_off();
       break;
-    case ONE:  
-      state_flip();
-    case TWO:
+    case STANDBY:  
+      state_standby();
+      break;
+    case SHAKE:
       state_shake();
+      break;
+    case FLIP:
+      state_flip();
+      break;
+    case ROTATE:
+      state_rotate();
       break;
   }
 }

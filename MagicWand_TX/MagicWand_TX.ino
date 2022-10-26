@@ -24,6 +24,8 @@
 #define HIVEMQ_PASSWORD "Rossisboss4"
 
 #define LOG Serial3
+#define GREEN_LED 11 // power LED
+#define RED_LED 13 // command sent LED
 
 static uint32_t counter = 0;
 
@@ -32,16 +34,27 @@ void connect_lte(void);
 void connect_mqtt(void);
 
 void setup() {
+    // set LEDs as outputs
+    pinMode(GREEN_LED, OUTPUT);
+    pinMode(RED_LED, OUTPUT);
+
+    // turn both on signaling power, not connected
+    digitalWrite(GREEN_LED, HIGH);
+    digitalWrite(RED_LED, HIGH);
+    
     Log.begin(115200);
     Log.setLogLevelStr("debug");
     LedCtrl.begin();
     LedCtrl.startupCycle();
 
     Log.info("Starting initialization of MQTT with username and password");
-    TLS_config();
-    connect_lte();
-    connect_mqtt();
 
+    // turn off red, indicated connected
+    if(TLS_config() && connect_lte() && connect_mqtt()){
+      digitalWrite(RED_LED, LOW); // green LED stays on
+    } else {
+      digitalWrite(GREEN_LED, LOW); // turn green LED off, keep red ON signaling error (power cycle device)
+    }
     Log.rawf(" OK!\r\n");
 }
 
@@ -62,8 +75,13 @@ void loop() {
     delay(10000);
 }
 
-void TLS_config(void)
+
+ /*
+  * ############ IoT FUNCTIONS
+  */
+bool TLS_config(void)
 {
+  
     SequansController.begin();
     Log.info(">> Setting up security profile for MQTT TLS without ECC");
 
@@ -73,27 +91,30 @@ void TLS_config(void)
 
     if (!SequansController.waitForURC("SQNSPCFG", NULL, 0, 4000)) {
         Log.infof(">> Error: Failed to set security profile\r\n");
-        return;
+        return false;
     }
     Log.info(">> TLS config complete");
     SequansController.end();
-
+    return true;
 }
 
-void connect_lte(void)
+bool connect_lte(void)
 {
+    
     Log.info(">> LTE connect");
 
     // Establish LTE connection
     if (!Lte.begin()) 
     {
         Log.error(">> LTE connect fail\r\n");
+        return false;
         // Halt here
-        while (1) {}
     }
-   } // end connect lte
+  return true;
+    
+} // end connect lte
 
-void connect_mqtt(void)
+bool connect_mqtt(void)
 {
     int connect_attempt = 0;
   // Connect to the MGtt broker
@@ -113,18 +134,23 @@ void connect_mqtt(void)
         
     if(connect_attempt < 10)
       {
-          Log.rawf(">> broker connected");
-          delay(5000);
+          Log.rawf(">> broker connected\n");
+          MqttClient.subscribe(MQTT_SUB_TOPIC);
+          delay(2000);
+          return true;
           /*
           MqttClient.end();
           Log.rawf("hanging up\r\n");
           Lte.end();
           */              
        }
+     
     else 
       {
         Log.rawf("\r\n");
         Log.error(">> broker connect fail, \r\n>> terminating LTE connection\r\n");
         Lte.end();
+        return false;
       }
+      return false;
 }
