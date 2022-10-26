@@ -257,12 +257,14 @@ void display_panOrBounceBitmap (uint8_t bitmapSize) {
 void logo_shake(void){
   for(int i = 8; i >= 0; i--){
     matrix->clear();
+    matrix->fillScreen(LED_WHITE_HIGH);
     matrix->drawRGBBitmap(i, 0, (const uint16_t *) mchp, 24, 24);
     matrix->show();
     delay(25);
   }
   for(int i = 1; i < 8; i++){
     matrix->clear();
+    matrix->fillScreen(LED_WHITE_HIGH);
     matrix->drawRGBBitmap(i, 0, (const uint16_t *) mchp, 24, 24);
     matrix->show();
     delay(25);
@@ -327,10 +329,11 @@ void logo_flip(void){
 }
 
 void logo_rotate(void){
-  #define ROTATION_DEGREES 20
+  #define ROTATION_DEGREES 15
   
-  for(int i = 0; i < (int)360/20; i++){
+  for(int i = 0; i < (int)360/ROTATION_DEGREES; i++){
    matrix->clear();
+   matrix->fillScreen(LED_WHITE_HIGH);    
    matrix->drawRGBBitmap(4, 0, (const uint16_t *) mchp_rotate[i], 24, 24);
    matrix->show();
    delay(100);

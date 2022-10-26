@@ -5,7 +5,7 @@ import subprocess
 import os
 import re
  
-degrees = 20
+degrees = 15
 bitmap_height = 36
 
 # Giving The Original image Directory
@@ -21,7 +21,7 @@ for x in range(0, 360, degrees):
    subprocess.run(["UTFTConverter_w.exe", "logo_{}.png".format(x), "/c"])
    j+=1
 
-final_file = []
+pre_final_file = []
 files = []
 
 # combine all c files into 1
@@ -34,12 +34,18 @@ for file in files:
     with open(file, 'r') as f:
         for line in f:
             if line[:2] == "0x":
-                final_file.append(line)
+                pre_final_file.append(line)
+
+final_file = []
+# replace all pixels with white pixels
+for line in pre_final_file:
+    final_file.append(line.replace("0x0000", "0xFFFF"))
+
 
 # write include & nested array declaration
 with open('mchp_rotations.h', 'w') as f:
     f.write(f"#include <avr/pgmspace.h>\n")
-    f.write(f"const unsigned short mchp_rotate[{int(360/degrees)}][576] PROGMEM={{\n{{")
+    f.write(f"const uint16_t mchp_rotate[{int(360/degrees)}][576] PROGMEM={{\n{{")
     i = 0
     count = 0
     for line in final_file:
