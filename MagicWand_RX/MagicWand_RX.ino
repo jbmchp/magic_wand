@@ -1,5 +1,15 @@
-// NeoPixel simple sketch (c) 2013 Shae Erisson, adapted to tinyNeoPixel library by Spence Konde 2019.
-// released under the GPLv3 license to match the rest of the AdaFruit NeoPixel library
+/* 
+ *  RX side of the Magic Wand. It expects one of the following to be published to magicwand:
+ *  magicwand/shake
+ *  magicwand/flip
+ *  magicwand/rotate
+ *  
+ *  TODO:
+ *  adjust animation lengths so it goes for ~10 seconds before returning to standby
+ *  
+ *  On receipt, the animation will commence for 10 seconds, then return to the microchip logo
+ */
+
 
 
 #include <Arduino.h>
@@ -18,11 +28,12 @@ bool connect_mqtt(void);
 void logo_shake(void);
 void logo_rotate(void);
 void logo_flip(void);
+void logo_standby(void);
 
 #define PIN PIN_PE1
 
 #define WHITE_BACKDROP // if a white background should fill the rest of the pixel rectangle
-#define BRIGHTNESS 32
+#define BRIGHTNESS 32 // turn up if in bright room
 
 
 #ifndef PSTR
@@ -36,41 +47,12 @@ Adafruit_NeoMatrix *matrix = new Adafruit_NeoMatrix(32, 8, 1, 3, PIN,
     NEO_TILE_COLUMNS+ NEO_TILE_TOP + NEO_TILE_LEFT +  NEO_TILE_PROGRESSIVE,
   NEO_GRB + NEO_KHZ800 );
 
+// COlors used
 #define LED_BLACK    0
-
-#define LED_RED_VERYLOW   (3 <<  11)
-#define LED_RED_LOW     (7 <<  11)
-#define LED_RED_MEDIUM    (15 << 11)
-#define LED_RED_HIGH    (31 << 11)
-
-#define LED_GREEN_VERYLOW (1 <<  5)   
 #define LED_GREEN_LOW     (15 << 5)  
-#define LED_GREEN_MEDIUM  (31 << 5)  
+#define LED_RED_HIGH    (31 << 11)
 #define LED_GREEN_HIGH    (63 << 5)  
-
-#define LED_BLUE_VERYLOW  3
-#define LED_BLUE_LOW    7
-#define LED_BLUE_MEDIUM   15
 #define LED_BLUE_HIGH     31
-
-#define LED_ORANGE_VERYLOW  (LED_RED_VERYLOW + LED_GREEN_VERYLOW)
-#define LED_ORANGE_LOW    (LED_RED_LOW     + LED_GREEN_LOW)
-#define LED_ORANGE_MEDIUM (LED_RED_MEDIUM  + LED_GREEN_MEDIUM)
-#define LED_ORANGE_HIGH   (LED_RED_HIGH    + LED_GREEN_HIGH)
-
-#define LED_PURPLE_VERYLOW  (LED_RED_VERYLOW + LED_BLUE_VERYLOW)
-#define LED_PURPLE_LOW    (LED_RED_LOW     + LED_BLUE_LOW)
-#define LED_PURPLE_MEDIUM (LED_RED_MEDIUM  + LED_BLUE_MEDIUM)
-#define LED_PURPLE_HIGH   (LED_RED_HIGH    + LED_BLUE_HIGH)
-
-#define LED_CYAN_VERYLOW  (LED_GREEN_VERYLOW + LED_BLUE_VERYLOW)
-#define LED_CYAN_LOW    (LED_GREEN_LOW     + LED_BLUE_LOW)
-#define LED_CYAN_MEDIUM   (LED_GREEN_MEDIUM  + LED_BLUE_MEDIUM)
-#define LED_CYAN_HIGH   (LED_GREEN_HIGH    + LED_BLUE_HIGH)
-
-#define LED_WHITE_VERYLOW (LED_RED_VERYLOW + LED_GREEN_VERYLOW + LED_BLUE_VERYLOW)
-#define LED_WHITE_LOW   (LED_RED_LOW     + LED_GREEN_LOW     + LED_BLUE_LOW)
-#define LED_WHITE_MEDIUM  (LED_RED_MEDIUM  + LED_GREEN_MEDIUM  + LED_BLUE_MEDIUM)
 #define LED_WHITE_HIGH    (LED_RED_HIGH    + LED_GREEN_HIGH    + LED_BLUE_HIGH)
 
 
@@ -93,6 +75,7 @@ Adafruit_NeoMatrix *matrix = new Adafruit_NeoMatrix(32, 8, 1, 3, PIN,
 #define HIVEMQ_PASSWORD "Rossisboss3"
 
 #define LOG Serial3
+//#define Serial Serial3
 
 // functions to react to motion
 void state_off();
@@ -100,6 +83,7 @@ void state_standby();
 void state_flip();
 void state_shake();
 void state_rotate();
+void call_animation(int repetitions, void (*animation_function)());
 
 // Which pin on the Arduino is connected to the NeoPixels?
 #define PIN            PIN_PE1
@@ -117,6 +101,7 @@ APP_DATA_t state_mach;  // create instance of FSM
 
 
 void setup() {
+  //Serial.begin(115200);
   // Setup MQTT
   Log.begin(115200);
   Log.setLogLevelStr("info");
@@ -150,40 +135,64 @@ void setup() {
     while(1);
   }
   
-  state_mach.state = OFF; // start in OFF state
+  state_mach.state = STANDBY; // start in STANDBY state
 }
 
 void loop() {
     // Recieve message
     String message = MqttClient.readMessage(MQTT_SUB_TOPIC);
+// read from UART
+//    String message = "";
+//      if( Serial.available() ){ // if new data is coming from the HW Serial
+//        while(Serial.available())          // reading data into char array 
+//        {
+//          char inChar = Serial.read();
+//          message += inChar;
+//        }
+//      }
+    // Update state
     if (message != "") {
         Log.infof("Got new message: %s\r\n", message.c_str());
-        if(message == "Plus"){
-          state_mach.state = ONE;
-          Log.infof("Moving to state ONE");
-        } else if(message == "Circle"){
-          state_mach.state = TWO;
-          Log.infof("Moving to state TWO");
+        if(message == "Shake"){
+          state_mach.state = SHAKE;
+          Log.infof("Moving to state SHAKE");
+        } else if(message == "Flip"){
+          state_mach.state = FLIP;
+          Log.infof("Moving to state FLIP");
+        } else if(message == "Rotate"){
+          state_mach.state = ROTATE;
+          Log.infof("Moving to state ROTATE");
         }
         message = "";
     }
-  // Act on message
+  // Act on message (hold for ~10s
   switch(state_mach.state)  {
     case OFF: // off functions
-      state_off();
-      break;
-    case STANDBY:  
+    case STANDBY:
       state_standby();
       break;
     case SHAKE:
-      state_shake();
+      call_animation(5, state_shake);
+      state_mach.state = STANDBY;
       break;
     case FLIP:
-      state_flip();
+      call_animation(5, state_flip);
+      state_mach.state = STANDBY;
       break;
     case ROTATE:
-      state_rotate();
+      call_animation(5, state_rotate);
+      state_mach.state = STANDBY;
+
       break;
+    default:
+      state_off();
+      break;
+  }
+}
+
+void call_animation(int repetitions, void (*animation_function)()){
+  for(int i = 0; i < repetitions; i++){
+    animation_function();
   }
 }
 
