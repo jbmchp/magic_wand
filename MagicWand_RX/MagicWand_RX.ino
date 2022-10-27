@@ -318,6 +318,10 @@ void logo_rotate(void){
 /*
  * ############## END OF ANIMATION FUNCTIONS
  */
+
+ /*
+  * ############ IoT FUNCTIONS
+  */
 bool TLS_config(void)
 {
   

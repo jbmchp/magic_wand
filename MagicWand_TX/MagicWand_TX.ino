@@ -24,14 +24,14 @@
 #define HIVEMQ_PASSWORD "Rossisboss4"
 
 #define LOG Serial3
-#define GREEN_LED 11 // power LED
-#define RED_LED 13 // command sent LED
+#define GREEN_LED PIN_PB2 // power LED (pin 13)
+#define RED_LED PIN_PB5 // command sent LED (pin 10)
 
 static uint32_t counter = 0;
 
-void TLS_config(void);
-void connect_lte(void);
-void connect_mqtt(void);
+bool TLS_config(void);
+bool connect_lte(void);
+bool connect_mqtt(void);
 
 void setup() {
     // set LEDs as outputs
@@ -52,8 +52,10 @@ void setup() {
     // turn off red, indicated connected
     if(TLS_config() && connect_lte() && connect_mqtt()){
       digitalWrite(RED_LED, LOW); // green LED stays on
+      Log.info("Red turned off");
     } else {
       digitalWrite(GREEN_LED, LOW); // turn green LED off, keep red ON signaling error (power cycle device)
+      Log.info("Green turned off");
     }
     Log.rawf(" OK!\r\n");
 }
@@ -135,14 +137,9 @@ bool connect_mqtt(void)
     if(connect_attempt < 10)
       {
           Log.rawf(">> broker connected\n");
-          MqttClient.subscribe(MQTT_SUB_TOPIC);
+          //MqttClient.subscribe(MQTT_SUB_TOPIC);
           delay(2000);
-          return true;
-          /*
-          MqttClient.end();
-          Log.rawf("hanging up\r\n");
-          Lte.end();
-          */              
+          return true;           
        }
      
     else 
