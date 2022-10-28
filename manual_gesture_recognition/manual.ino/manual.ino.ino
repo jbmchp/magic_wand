@@ -50,7 +50,7 @@ typedef struct{
     float gyroZ;
 } imu_data_t;
 
-typedef enum {NONE, PLUS, CIRCLE, FLICK, SHAKE} Motions_t; 
+typedef enum {NONE, PLUS, CIRCLE, FLIP, SHAKE} Motions_t; 
 
 sensors_event_t a, g, temp; // throw away variable
 imu_data_t data;
@@ -164,8 +164,11 @@ void run_action(Motions_t motion){
     case PLUS:
       Serial.println("Plus detected");
     break;  
-    case FLICK:
-      Serial.println("Flicked wand detected");
+    case FLIP:
+      Serial.println("Flipped wand detected");
+      break;
+    case SHAKE:
+      Serial.println("Shaken wand detected");
       break;
     case NONE:
     Serial.println("No motion detected");
@@ -203,21 +206,34 @@ Motions_t find_motion(){
   Serial.print("\t");
   Serial.println(stats.gyroZDiff);
 
-  // flick has strong Y but small X & Z
-  if( (stats.gyroYMax > (GYRO_MAX*0.5)) && (stats.gyroYDiff > (GYRO_MAX*2)*0.5)
-      && (stats.gyroXMax < GYRO_MAX*0.5) && (stats.gyroXDiff <  GYRO_MAX*0.5)
-      && (stats.gyroZMax < GYRO_MAX*0.5) && (stats.gyroZDiff <  GYRO_MAX*0.5)) { 
-    Serial.println("Flick Detected!");
-    return FLICK;
+// circle has roughly equal gyro values for X,Y, Z
+  if ( (stats.gyroXMax > GYRO_MAX*0.8) && (stats.gyroXDiff > (GYRO_MAX*2)*0.8)
+      && (stats.gyroYMax < (GYRO_MAX*0.4)) && (stats.gyroYDiff < (GYRO_MAX*2)*0.4) && 
+          (stats.gyroZMax < (GYRO_MAX*0.4)) && (stats.gyroZDiff < (GYRO_MAX*2)*0.4) ) {
+    Serial.println("Turn Detected!\n\n");
+    delay(500);
+    return CIRCLE;
+}
+  // flip has strong Y but small X & Z
+  else if( (stats.gyroXMax < GYRO_MAX*0.2) && (stats.gyroXDiff <  (GYRO_MAX*2)*0.2) &&   
+      (stats.gyroYMax > (GYRO_MAX*0.8)) && (stats.gyroYDiff > (GYRO_MAX*0.95))
+      && (stats.gyroZMax < GYRO_MAX*0.2) && (stats.gyroZDiff <  (GYRO_MAX*2)*0.2)) { 
+    Serial.println("Flip Detected!\n\n");
+    delay(500);
+    return FLIP;
   }
 
 // shake has strong Y and Z, but small X
   else if ( (stats.gyroXMax < GYRO_MAX*0.5) && (stats.gyroXDiff < GYRO_MAX*0.5)
       && (stats.gyroYMax > (GYRO_MAX*0.3)) && (stats.gyroYDiff > (GYRO_MAX*2)*0.3) && 
           (stats.gyroZMax > (GYRO_MAX*0.5)) && (stats.gyroZDiff > (GYRO_MAX*2)*0.5))  {
-    Serial.println("Shake Detected!");
+    Serial.println("Shake Detected!\n\n");
+    delay(500);
     return SHAKE;
 }
+
+// shake has strong Y and Z, but small X
+ 
 //  else if(stats.gyroYMin < (GYRO_MIN*0.8)) {
 //    Serial.println("Exceeded negative Y Gyro MIN!");
 //  }                                                 //if (stats.gyroYDiff > (GYRO_MAX*2)*0.8) {// && stats.gyroYMin > (GYRO_MAX*2)*0.5) {
