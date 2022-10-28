@@ -30,10 +30,10 @@ void logo_rotate(void);
 void logo_flip(void);
 void logo_standby(void);
 
-#define PIN PIN_PE1
+#define PIN PIN_PB2 // pin D13, PIN_PE1 = D6
 
 #define WHITE_BACKDROP // if a white background should fill the rest of the pixel rectangle
-#define BRIGHTNESS 32 // turn up if in bright room
+#define BRIGHTNESS 10 // turn up if in bright room
 
 
 #ifndef PSTR
@@ -85,9 +85,6 @@ void state_shake();
 void state_rotate();
 void call_animation(int repetitions, void (*animation_function)());
 
-// Which pin on the Arduino is connected to the NeoPixels?
-#define PIN            PIN_PE1
-
 // states of FSM
 typedef enum  {
   OFF, STANDBY, SHAKE, FLIP, ROTATE
@@ -114,42 +111,33 @@ void setup() {
   matrix->setBrightness(BRIGHTNESS);
   matrix->clear();
   matrix->show();
-
-  // Setup cell connection, matrix turns green then black when ready
-  Log.info("Starting initialization of MQTT with username and password");
-  matrix->clear();
-  matrix->fillScreen(LED_GREEN_LOW);
-  matrix->show();
-  if(TLS_config() && connect_lte() && connect_mqtt()){
-    matrix->clear();
-    matrix->fillScreen(LED_GREEN_HIGH);
-    matrix->show();
-    delay(2000);
-    matrix->clear();
-    matrix->fillScreen(LED_BLACK);
-    matrix->show();
-  } else {
-    matrix->clear();
-    matrix->fillScreen(LED_RED_HIGH);
-    matrix->show();
-    while(1);
-  }
-  
+//
+//  // Setup cell connection, matrix turns green then black when ready
+//  Log.info("Starting initialization of MQTT with username and password");
+//  matrix->clear();
+//  matrix->fillScreen(LED_GREEN_LOW);
+//  matrix->show();
+//  if(TLS_config() && connect_lte() && connect_mqtt()){
+//    matrix->clear();
+//    matrix->fillScreen(LED_GREEN_HIGH);
+//    matrix->show();
+//    delay(2000);
+//    matrix->clear();
+//    matrix->fillScreen(LED_BLACK);
+//    matrix->show();
+//  } else {
+//    matrix->clear();
+//    matrix->fillScreen(LED_RED_HIGH);
+//    matrix->show();
+//    while(1);
+//  }
+//  
   state_mach.state = STANDBY; // start in STANDBY state
 }
 
 void loop() {
     // Recieve message
     String message = MqttClient.readMessage(MQTT_SUB_TOPIC);
-// read from UART
-//    String message = "";
-//      if( Serial.available() ){ // if new data is coming from the HW Serial
-//        while(Serial.available())          // reading data into char array 
-//        {
-//          char inChar = Serial.read();
-//          message += inChar;
-//        }
-//      }
     // Update state
     if (message != "") {
         Log.infof("Got new message: %s\r\n", message.c_str());
@@ -176,11 +164,11 @@ void loop() {
       state_mach.state = STANDBY;
       break;
     case FLIP:
-      call_animation(5, state_flip);
+      call_animation(1, state_flip);
       state_mach.state = STANDBY;
       break;
     case ROTATE:
-      call_animation(5, state_rotate);
+      call_animation(2, state_rotate);
       state_mach.state = STANDBY;
 
       break;
@@ -207,7 +195,7 @@ void state_standby(void){
     #ifdef WHITE_BACKDROP
       matrix->fillScreen(LED_WHITE_HIGH);
     #endif
-    matrix->drawRGBBitmap(5, 0, (const uint16_t *) mchp, 24, 24);
+    matrix->drawRGBBitmap(4, 0, (const uint16_t *) mchp, 24, 24);
     matrix->show();
 }
 
@@ -227,7 +215,7 @@ void state_rotate(void){
  * ############## ANIMATION FUNCTIONS
  */
 void logo_shake(void){
-  for(int i = 8; i >= 0; i--){
+  for(int i = 4; i >= 0; i--){
     matrix->clear();
     #ifdef WHITE_BACKDROP
       matrix->fillScreen(LED_WHITE_HIGH);
@@ -245,10 +233,17 @@ void logo_shake(void){
     matrix->show();
     delay(25);
   }
-
+  for(int i = 8; i > 4; i--){
+    matrix->clear();
+    #ifdef WHITE_BACKDROP
+      matrix->fillScreen(LED_WHITE_HIGH);
+    #endif
+    matrix->drawRGBBitmap(i, 0, (const uint16_t *) mchp, 24, 24);
+    matrix->show();
+    delay(25);
+  }
 }
 void logo_flip(void){
-  #define FLIP_DELAY 0
   // flip
   for(int i = 0; i < 12; i++){
     matrix->clear();
@@ -261,7 +256,6 @@ void logo_flip(void){
       matrix->drawLine(0, 24-j, 32, 24-j, LED_BLACK);
     }
     matrix->show();
-    delay(FLIP_DELAY);
   }
 
   for(int i = 12; i >= 0; i--){
@@ -275,10 +269,9 @@ void logo_flip(void){
       matrix->drawLine(0, 24-j, 32, 24-j, LED_BLACK);
     }
     matrix->show();
-    delay(FLIP_DELAY);
   }
 
-  delay(3000);
+  delay(250);
 
   // unfip
   for(int i = 0; i < 12; i++){
@@ -292,7 +285,6 @@ void logo_flip(void){
       matrix->drawLine(0, 24-j, 32, 24-j, LED_BLACK);
     }
     matrix->show();
-    delay(FLIP_DELAY);
   }
 
   for(int i = 12; i >= 0; i--){
@@ -306,9 +298,8 @@ void logo_flip(void){
       matrix->drawLine(0, 24-j, 32, 24-j, LED_BLACK);
     }
     matrix->show();
-    delay(FLIP_DELAY);
   }
-  delay(3000);
+  delay(250);
 }
 
 void logo_rotate(void){
@@ -320,7 +311,7 @@ void logo_rotate(void){
    #endif
    matrix->drawRGBBitmap(4, 0, (const uint16_t *) mchp_rotate[i], 24, 24);
    matrix->show();
-   delay(100);
+   delay(50);
   }
 }
 
