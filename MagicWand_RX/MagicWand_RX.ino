@@ -33,7 +33,7 @@ void logo_standby(void);
 #define PIN PIN_PB2 // pin D13, PIN_PE1 = D6
 
 #define WHITE_BACKDROP // if a white background should fill the rest of the pixel rectangle
-#define BRIGHTNESS 10 // turn up if in bright room
+#define BRIGHTNESS 32 // turn up if in bright room
 
 
 #ifndef PSTR
@@ -111,27 +111,27 @@ void setup() {
   matrix->setBrightness(BRIGHTNESS);
   matrix->clear();
   matrix->show();
-//
-//  // Setup cell connection, matrix turns green then black when ready
-//  Log.info("Starting initialization of MQTT with username and password");
-//  matrix->clear();
-//  matrix->fillScreen(LED_GREEN_LOW);
-//  matrix->show();
-//  if(TLS_config() && connect_lte() && connect_mqtt()){
-//    matrix->clear();
-//    matrix->fillScreen(LED_GREEN_HIGH);
-//    matrix->show();
-//    delay(2000);
-//    matrix->clear();
-//    matrix->fillScreen(LED_BLACK);
-//    matrix->show();
-//  } else {
-//    matrix->clear();
-//    matrix->fillScreen(LED_RED_HIGH);
-//    matrix->show();
-//    while(1);
-//  }
-//  
+
+  // Setup cell connection, matrix turns green then black when ready
+  Log.info("Starting initialization of MQTT with username and password");
+  matrix->clear();
+  matrix->fillScreen(LED_GREEN_LOW);
+  matrix->show();
+  if(TLS_config() && connect_lte() && connect_mqtt()){
+    matrix->clear();
+    matrix->fillScreen(LED_GREEN_HIGH);
+    matrix->show();
+    delay(2000);
+    matrix->clear();
+    matrix->fillScreen(LED_BLACK);
+    matrix->show();
+  } else {
+    matrix->clear();
+    matrix->fillScreen(LED_RED_HIGH);
+    matrix->show();
+    while(1);
+  }
+  
   state_mach.state = STANDBY; // start in STANDBY state
 }
 
@@ -313,6 +313,7 @@ void logo_rotate(void){
    matrix->show();
    delay(50);
   }
+   matrix->drawRGBBitmap(4, 0, (const uint16_t *) mchp, 24, 24);
 }
 
 /*

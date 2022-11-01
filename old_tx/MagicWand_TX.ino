@@ -34,6 +34,9 @@ typedef struct{
   float gyroXDiff;
   float gyroYDiff;
   float gyroZDiff;
+//  float accelXDiff;
+//  float accelYDiff;
+//  float accelZDiff;
   float gyroXMax;
   float gyroYMax;
   float gyroZMax;
@@ -117,36 +120,54 @@ void setup() {
   // RAW to G = 4,096 bits
   mpu.setGyroRange(MPU6050_RANGE_500_DEG);
   mpu.setFilterBandwidth(MPU6050_BAND_94_HZ); // 94 Hz for filtering a lot of noise w/o being overpowering
+  //interrupts();
+  // Setup 10ms timer
+  takeOverTCA0(); // this replaces disabling and resettng the timer, required previously.
+  TCA0.SINGLE.CTRLB = 0b00000000;
+  TCA0.SINGLE.INTCTRL = 0b00000001; // Interrupt on Overflow
+  TCA0.SINGLE.PER = 0x249; // 0x2DB4 = 500ms, 0x75 = 5ms, 0xEA = 10ms, 0x492 = 50ms, 0x249 = 25ms
+  TCA0.SINGLE.CTRLA = 0b0001111; // Enable the timer with 1024 prescalar
+  
+  interrupts(); // enable interrupts
+}
+
+// Update data in interrupt
+ISR(TCA0_OVF_vect) {
+    mpu.getEvent(&a, &g, &temp);
+    data.accelX = a.acceleration.x;
+    data.accelY = a.acceleration.y;
+    data.accelZ = a.acceleration.z;
+    data.gyroX = g.gyro.x;
+    data.gyroY = g.gyro.y;
+    data.gyroZ = g.gyro.z;
+    update = true;
+    TCA0.SINGLE.INTFLAGS  = 0b00000001; // Clear the interrupt flags, otherwise the interrupt will fire continually
 }
 
 void loop() {
-
-  mpu.getEvent(&a, &g, &temp);
-  data.accelX = a.acceleration.x;
-  data.accelY = a.acceleration.y;
-  data.accelZ = a.acceleration.z;
-  data.gyroX = g.gyro.x;
-  data.gyroY = g.gyro.y;
-  data.gyroZ = g.gyro.z;
-  delay(10);
-  if(!buffer.push(data)){ // wait for buffer to fill
-    update_stats();
-    Motions_t motion = find_motion();
-    if(motion != NONE){
-      digitalWrite(RED_LED, HIGH); // red on while animation block
-      run_action(motion);
-      Log.infof("Ran action");
-      reset_from_action();
-      Log.infof("Reset from action");
-      motion = NONE;
-      Log.infof("Cleared motion");
-      buffer.clear();
-      Log.infof("Cleared buffer");
-      Log.infof("Delaying 6s");
-      delay(6000);
-      digitalWrite(RED_LED, LOW);
-      Log.infof("Light off");
+  if(update){ // on update
+    noInterrupts();
+    if(!buffer.push(data)){ // wait for buffer to fill
+      update_stats();
+      Motions_t motion = find_motion();
+      if(motion != NONE){
+        digitalWrite(RED_LED, HIGH); // red on while animation block
+        run_action(motion);
+        Log.infof("Ran action");
+        reset_from_action();
+        Log.infof("Reset from action");
+        motion = NONE;
+        Log.infof("Cleared motion");
+        buffer.clear();
+        Log.infof("Cleared buffer");
+        Log.infof("Delaying 5s");
+        delay(3000);
+        digitalWrite(RED_LED, LOW);
+        Log.infof("Light off");
+      }
     }
+    update = false;
+    interrupts();
   }
 }
 
@@ -159,18 +180,18 @@ void run_action(Motions_t motion){
   switch(motion){
     case SHAKE:
       message_to_publish = "Shake";
-      //Serial.println("Shake detected");
+      Serial.println("Shake detected");
       break;
     case ROTATE:
       message_to_publish = "Rotate";
-      //Serial.println("Rotate detected");
+      Serial.println("Rotate detected");
       break;
     case FLIP:
       message_to_publish = "Flip";
-      //Serial.println("Flip wand detected");
+      Serial.println("Flip wand detected");
       break;
     case NONE:
-    //Serial.println("No motion detected");
+    Serial.println("No motion detected");
     break;
   }
 
@@ -207,16 +228,19 @@ Motions_t find_motion(void){
           (stats.gyroZMax < (GYRO_MAX*0.4)) && (stats.gyroZDiff < (GYRO_MAX*2)*0.4) ) {
     return ROTATE;
 }
+  // flip has strong Y but small X & Z
+  else if( (stats.gyroXMax < GYRO_MAX*0.2) && (stats.gyroXDiff <  (GYRO_MAX*2)*0.2) &&   
+      (stats.gyroYMax > (GYRO_MAX*0.8)) && (stats.gyroYDiff > (GYRO_MAX*0.95))
+      && (stats.gyroZMax < GYRO_MAX*0.2) && (stats.gyroZDiff <  (GYRO_MAX*2)*0.2)) { 
+    return FLIP;
+  }
+
 // shake has strong Y and Z, but small X
   else if ( (stats.gyroXMax < GYRO_MAX*0.5) && (stats.gyroXDiff < GYRO_MAX*0.5)
       && (stats.gyroYMax > (GYRO_MAX*0.3)) && (stats.gyroYDiff > (GYRO_MAX*2)*0.3) && 
           (stats.gyroZMax > (GYRO_MAX*0.5)) && (stats.gyroZDiff > (GYRO_MAX*2)*0.5))  {
     return SHAKE;
-          }
-  // flip has strong Y but small X & Z
-  else if((stats.gyroYMax > (GYRO_MAX*0.8)) && (stats.gyroYDiff > (GYRO_MAX*2*0.8))) { 
-    return FLIP;
-  }
+  }  
  return NONE;
 }
 
